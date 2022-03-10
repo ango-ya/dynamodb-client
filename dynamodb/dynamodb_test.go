@@ -20,10 +20,10 @@ const (
 	TestProfile = "sto-dev"
 )
 
-type Person struct {
-	Id   string
-	Name string
-	Age  int
+type Persons struct {
+	Id   string `key:"-" dynamodbav:"id"`
+	Name string `dynamodbav:"name"`
+	Age  int    `dynamodbav:"age"`
 }
 
 func TestAll(t *testing.T) {
@@ -34,10 +34,10 @@ func TestAll(t *testing.T) {
 			config.WithDefaultRegion(TestRegion),
 			config.WithSharedConfigProfile(TestProfile),
 		}
-		persons = []Person{
-			Person{"1", "tom", 30},
-			Person{"2", "tim", 40},
-			Person{"3", "tik", 50},
+		persons = []Persons{
+			Persons{"1", "tom", 30},
+			Persons{"2", "tim", 40},
+			Persons{"3", "tik", 50},
 		}
 		err error
 	)
@@ -100,11 +100,18 @@ func TestAll(t *testing.T) {
 	resp := listOut.(*dynamodb.ScanOutput)
 	require.Equal(t, len(persons), int(resp.ScannedCount))
 
-	var result []Person
+	var result []Persons
 	err = attributevalue.UnmarshalListOfMaps(resp.Items, &result)
 	if err != nil {
 		panic(fmt.Sprintf("failed to unmarshal Dynamodb Scan Items, %v", err))
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Id < result[j].Id
+	})
+	require.EqualValues(t, persons, result)
+
+	err = d.ListStruct(ctx, persons[0], &result)
+	require.NoError(t, err)
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Id < result[j].Id
 	})
@@ -149,9 +156,13 @@ func TestAll(t *testing.T) {
 
 	res := getOut.(*dynamodb.GetItemOutput)
 
-	var p Person
+	var p Persons
 	err = attributevalue.UnmarshalMap(res.Item, &p)
-	require.Equal(t, Person{"1", "tom", 100}, p)
+	require.Equal(t, Persons{"1", "tom", 100}, p)
+
+	err = d.GetStruct(ctx, persons[0], &p)
+	require.NoError(t, err)
+	require.Equal(t, Persons{"1", "tom", 100}, p)
 
 	getArg = &dynamodb.GetItemInput{
 		TableName: aws.String(tableName),

@@ -8,17 +8,19 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	// "github.com/davecgh/go-spew/spew"
 )
 
 var (
 	ErrUnsupported     = errors.New("unsupported")
 	ErrUnexpectedInput = errors.New("unexpected input")
 	ErrNothingToCommit = errors.New("nothing to commit")
-	ErrKeyNotFound     = errors.New("key not found")
+	ErrKeyTagNotFound  = errors.New("key tag not found")
 )
 
 type DynamoDB struct {
@@ -78,12 +80,67 @@ func (d *DynamoDB) Get(ctx context.Context, arg *dynamodb.GetItemInput) (out int
 	return d.invoke(ctx, arg, handler)
 }
 
+func (d *DynamoDB) GetStruct(ctx context.Context, in interface{}, result interface{}) (err error) {
+	v := reflect.ValueOf(in)
+
+	// only struct supported for now
+	if v.Kind() != reflect.Struct {
+		err = ErrUnsupported
+		return
+	}
+
+	key, exist, err := lookupKey(in)
+	if err != nil && !exist {
+		err = ErrKeyTagNotFound
+	}
+	if err != nil {
+		return
+	}
+
+	arg := &dynamodb.GetItemInput{
+		TableName: aws.String(name(v.Type())),
+		Key:       key,
+	}
+
+	out, err := d.Get(ctx, arg)
+	if err != nil {
+		return
+	}
+
+	res := out.(*dynamodb.GetItemOutput)
+
+	return attributevalue.UnmarshalMap(res.Item, result)
+}
+
 func (d *DynamoDB) List(ctx context.Context, arg *dynamodb.ScanInput) (out interface{}, err error) {
 	handler := func(ctx context.Context, in interface{}) (out interface{}, err error) {
 		return d.client.Scan(ctx, arg)
 	}
 
 	return d.invoke(ctx, arg, handler)
+}
+
+func (d *DynamoDB) ListStruct(ctx context.Context, in interface{}, result interface{}) (err error) {
+	v := reflect.ValueOf(in)
+
+	// only struct supported for now
+	if v.Kind() != reflect.Struct {
+		err = ErrUnsupported
+		return
+	}
+
+	arg := &dynamodb.ScanInput{
+		TableName: aws.String(name(v.Type())),
+	}
+
+	out, err := d.List(ctx, arg)
+	if err != nil {
+		return
+	}
+
+	res := out.(*dynamodb.ScanOutput)
+
+	return attributevalue.UnmarshalListOfMaps(res.Items, result)
 }
 
 func (d *DynamoDB) DescribeTable(ctx context.Context, arg *dynamodb.DescribeTableInput) (out interface{}, err error) {
@@ -294,7 +351,7 @@ func attrDefsAndKyeSchemas(s interface{}) (defs []types.AttributeDefinition, ks 
 	}
 
 	if len(defs) == 0 {
-		err = ErrKeyNotFound
+		err = ErrKeyTagNotFound
 	}
 
 	return

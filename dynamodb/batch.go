@@ -82,7 +82,7 @@ func (b *BatchWriter) DeleteStruct(in interface{}) (err error) {
 
 	key, exist, err := lookupKey(in)
 	if err != nil && !exist {
-		err = ErrKeyNotFound
+		err = ErrKeyTagNotFound
 	}
 	if err != nil {
 		return
@@ -108,7 +108,7 @@ func (b *BatchWriter) UpdateStruct(in interface{}) (err error) {
 
 	key, exist, err := lookupKey(in)
 	if err != nil && !exist {
-		err = ErrKeyNotFound
+		err = ErrKeyTagNotFound
 	}
 	if err != nil {
 		return
@@ -175,7 +175,7 @@ func lookupKey(s interface{}) (attrMap map[string]types.AttributeValue, exist bo
 	}
 
 	if len(attrMap) == 0 {
-		err = ErrKeyNotFound
+		err = ErrKeyTagNotFound
 	}
 
 	return
