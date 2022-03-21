@@ -73,7 +73,7 @@ func TestAll(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	// put
-	batch, _ := d.Writer(ctx)
+	batch := d.Writer(ctx)
 	for _, person := range persons {
 		item := types.TransactWriteItem{
 			Put: &types.Put{
@@ -118,7 +118,7 @@ func TestAll(t *testing.T) {
 	require.EqualValues(t, persons, result)
 
 	// update & delete
-	batch, _ = d.Writer(ctx)
+	batch = d.Writer(ctx)
 	item := types.TransactWriteItem{
 		Update: &types.Update{
 			TableName: aws.String(tableName),

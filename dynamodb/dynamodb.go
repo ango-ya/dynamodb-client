@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/ango-ya/aws-s3-client/s3"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -26,6 +27,8 @@ var (
 type DynamoDB struct {
 	cfg    aws.Config
 	client *dynamodb.Client
+
+	s3client *s3.S3Client
 
 	logger  zerolog.Logger
 	middles []Middleware
@@ -54,6 +57,10 @@ func NewDynamoDB(ctx context.Context, confOpts []func(*config.LoadOptions) error
 	}
 
 	return
+}
+
+func (d *DynamoDB) SetS3(ctx context.Context, c *s3.S3Client) {
+	d.s3client = c
 }
 
 func (d *DynamoDB) CreateTable(ctx context.Context, arg *dynamodb.CreateTableInput) (out interface{}, err error) {
@@ -151,8 +158,14 @@ func (d *DynamoDB) DescribeTable(ctx context.Context, arg *dynamodb.DescribeTabl
 	return d.invoke(ctx, arg, handler)
 }
 
-func (d *DynamoDB) Writer(ctx context.Context) (out BatchWriter, err error) {
-	return BatchWriter{}, nil
+func (d *DynamoDB) Writer(ctx context.Context) BatchWriter {
+	return BatchWriter{}
+}
+
+func (d *DynamoDB) WriterWithS3(ctx context.Context) (b BatchWriterWithS3, err error) {
+	b.s3client = d.s3client
+	b.uploadeds = make(map[PairOfBucketNameAndKey]string)
+	return
 }
 
 func (d *DynamoDB) Commit(ctx context.Context, writer *BatchWriter) (out interface{}, err error) {

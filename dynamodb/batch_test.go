@@ -1,6 +1,7 @@
 package dynamodb
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ type AddressBook struct {
 
 func TestInsertStruct(t *testing.T) {
 	var (
+		ctx    = context.Background()
 		b      = BatchWriter{}
 		now, _ = time.Parse("2006-01-02", "2021-12-31")
 		user   = User{
@@ -36,7 +38,7 @@ func TestInsertStruct(t *testing.T) {
 		err error
 	)
 
-	err = b.InsertStruct(user)
+	err = b.InsertStruct(ctx, user)
 	require.NoError(t, err)
 
 	expected := types.TransactWriteItem{
@@ -56,6 +58,7 @@ func TestInsertStruct(t *testing.T) {
 
 func TestDeleteStruct(t *testing.T) {
 	var (
+		ctx  = context.Background()
 		b    = BatchWriter{}
 		user = User{
 			Id: "124",
@@ -63,7 +66,7 @@ func TestDeleteStruct(t *testing.T) {
 		err error
 	)
 
-	err = b.DeleteStruct(user)
+	err = b.DeleteStruct(ctx, user)
 	require.NoError(t, err)
 
 	expected := types.TransactWriteItem{
@@ -80,6 +83,7 @@ func TestDeleteStruct(t *testing.T) {
 
 func TestUpdateStruct(t *testing.T) {
 	var (
+		ctx  = context.Background()
 		b    = BatchWriter{}
 		addr = AddressBook{
 			Id:         1,
@@ -89,7 +93,7 @@ func TestUpdateStruct(t *testing.T) {
 		err error
 	)
 
-	err = b.UpdateStruct(addr)
+	err = b.UpdateStruct(ctx, addr)
 	require.NoError(t, err)
 
 	expected := types.TransactWriteItem{
