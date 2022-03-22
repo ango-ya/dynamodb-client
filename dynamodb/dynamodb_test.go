@@ -3,10 +3,12 @@ package dynamodb
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"testing"
 	"time"
 
+	"github.com/ango-ya/aws-s3-client/s3"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -180,5 +182,50 @@ func TestAll(t *testing.T) {
 		TableName: aws.String(tableName),
 	}
 	_, err = d.DropTable(ctx, dropArg)
+	require.NoError(t, err)
+}
+
+type Profile struct {
+	Id      string `key:"-" dynamodbav:"id"`
+	Name    string `dynamodbav:"name"`
+	Age     int    `dynamodbav:"age"`
+	IconImg string `dynamodbav:"icon-img"`
+}
+
+func TestWithS3(t *testing.T) {
+	var (
+		ctx      = context.Background()
+		confOpts = []func(*config.LoadOptions) error{
+			config.WithDefaultRegion(TestRegion),
+			config.WithSharedConfigProfile(TestProfile),
+		}
+		profiles = []Profile{
+			Profile{"101", "alice", 20, ""},
+			Profile{"102", "bob", 50, ""},
+		}
+		filePaths = []string{TestImagePath, TestImagePath2}
+		keys      = []string{TestKey, TestKey2}
+	)
+
+	d, err := NewDynamoDB(ctx, confOpts, WithTimeout(5*time.Second))
+	require.NoError(t, err)
+
+	s3client, err := s3.NewS3Client(ctx, confOpts, s3.WithTimeout(5*time.Second))
+	require.NoError(t, err)
+
+	d.SetS3(&s3client)
+	batch := d.WriterWithS3(ctx)
+
+	for i := range profiles {
+		file, err := os.Open(filePaths[i])
+		require.NoError(t, err)
+
+		err = batch.InsertStructWithS3(ctx, &profiles[i], "IconImg", TestBucketName, keys[i], file)
+		require.NoError(t, err)
+
+		file.Close()
+	}
+
+	_, err = d.CommitWithS3(ctx, &batch)
 	require.NoError(t, err)
 }

@@ -17,8 +17,10 @@ import (
 
 const (
 	TestImagePath  = "./testimg/sample.png"
+	TestImagePath2 = "./testimg/sample2.png"
 	TestBucketName = "tak-sandbox"
 	TestKey        = "sample.png"
+	TestKey2       = "sample2.png"
 )
 
 type User struct {
@@ -121,8 +123,9 @@ func TestUpdateStruct(t *testing.T) {
 			},
 		},
 	}
-
-	require.Equal(t, expected, b.inputs[0])
+	require.Equal(t, expected.Update.TableName, b.inputs[0].Update.TableName)
+	require.Equal(t, expected.Update.Key, b.inputs[0].Update.Key)
+	require.Equal(t, expected.Update.ExpressionAttributeValues, b.inputs[0].Update.ExpressionAttributeValues)
 }
 
 func TestUpdateStructWithS3(t *testing.T) {
@@ -152,22 +155,6 @@ func TestUpdateStructWithS3(t *testing.T) {
 
 	err = b.UpdateStructWithS3(ctx, &addr, "icon-img", TestBucketName, TestKey, file)
 	require.NoError(t, err)
-
-	expectedInput := types.TransactWriteItem{
-		Update: &types.Update{
-			TableName: aws.String("address-book"),
-			Key: map[string]types.AttributeValue{
-				"id":   &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", addr.Id)},
-				"addr": &types.AttributeValueMemberS{Value: addr.Addr},
-			},
-			UpdateExpression: aws.String("SET postal-code = :postal-code, icon-img = :icon-img"),
-			ExpressionAttributeValues: map[string]types.AttributeValue{
-				":postal-code": &types.AttributeValueMemberS{Value: addr.PostalCode},
-				":icon-img":    &types.AttributeValueMemberS{Value: expectedURI},
-			},
-		},
-	}
-	require.Equal(t, expectedInput, b.inputs[0])
 
 	expectedUploadeds := map[PairOfBucketNameAndKey]string{
 		PairOfBucketNameAndKey{Name: TestBucketName, Key: TestKey}: expectedURI,

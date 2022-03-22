@@ -2,6 +2,7 @@ package dynamodb
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
 	"time"
@@ -59,7 +60,7 @@ func NewDynamoDB(ctx context.Context, confOpts []func(*config.LoadOptions) error
 	return
 }
 
-func (d *DynamoDB) SetS3(ctx context.Context, c *s3.S3Client) {
+func (d *DynamoDB) SetS3(c *s3.S3Client) {
 	d.s3client = c
 }
 
@@ -165,47 +166,29 @@ func (d *DynamoDB) Writer(ctx context.Context) BatchWriter {
 	return BatchWriter{}
 }
 
-func (d *DynamoDB) WriterWithS3(ctx context.Context) (b BatchWriterWithS3, err error) {
+func (d *DynamoDB) WriterWithS3(ctx context.Context) (b BatchWriterWithS3) {
 	b.s3client = d.s3client
 	b.uploadeds = make(map[PairOfBucketNameAndKey]string)
 	return
 }
 
 func (d *DynamoDB) Commit(ctx context.Context, writer *BatchWriter) (out interface{}, err error) {
-	if writer.Len() == 0 {
-		err = ErrNothingToCommit
-		return
-	}
-
-	items, ok := writer.Contents().([]types.TransactWriteItem)
-	if !ok {
-		return nil, ErrUnexpectedInput
-	}
-
-	tx := &dynamodb.TransactWriteItemsInput{
-		TransactItems: items,
-	}
-
-	handler := func(ctx context.Context, in interface{}) (out interface{}, err error) {
-		return d.client.TransactWriteItems(ctx, tx)
-	}
-
-	d.logger.Info().Msgf("commiting %d numbers of data", len(items))
-
-	// retry 3 times
-	for i := 0; i < 3; i++ {
-		out, err = d.invoke(ctx, tx, handler)
-		if err == nil {
-			break
-		}
-	}
-
+	out, err = d.commit(ctx, writer.Contents())
 	return
 }
 
-func (d *DynamoDB) invoke(ctx context.Context, in interface{}, h Handler) (out interface{}, err error) {
-	handler := applyMiddlewares(h, d.middles)
-	return handler(ctx, in)
+func (d *DynamoDB) CommitWithS3(ctx context.Context, writer *BatchWriterWithS3) (out interface{}, err error) {
+	if out, err = d.commit(ctx, writer.Contents()); err != nil {
+		// delete uploaded files from s3
+		for pair, url := range writer.uploadeds {
+			if delErr := d.s3client.Delete(ctx, pair.Name, pair.Key); delErr != nil {
+				err = errors.Wrap(err, fmt.Sprintf("failed delete file(%s)", url))
+			}
+		}
+		return
+	}
+
+	return
 }
 
 func (d *DynamoDB) CreateTableFromStruct(ctx context.Context, in interface{}) (out interface{}, err error) {
@@ -316,6 +299,38 @@ func (d *DynamoDB) WaitForTableDeletion(ctx context.Context, in interface{}) err
 	)
 
 	return err
+}
+
+func (d *DynamoDB) invoke(ctx context.Context, in interface{}, h Handler) (out interface{}, err error) {
+	handler := applyMiddlewares(h, d.middles)
+	return handler(ctx, in)
+}
+
+func (d *DynamoDB) commit(ctx context.Context, items []types.TransactWriteItem) (out interface{}, err error) {
+	if len(items) == 0 {
+		err = ErrNothingToCommit
+		return
+	}
+
+	tx := &dynamodb.TransactWriteItemsInput{
+		TransactItems: items,
+	}
+
+	handler := func(ctx context.Context, in interface{}) (out interface{}, err error) {
+		return d.client.TransactWriteItems(ctx, tx)
+	}
+
+	d.logger.Info().Msgf("commiting %d numbers of data", len(items))
+
+	// retry 3 times
+	for i := 0; i < 3; i++ {
+		out, err = d.invoke(ctx, tx, handler)
+		if err == nil {
+			break
+		}
+	}
+
+	return
 }
 
 func IsExistingTable(err error) (bool, error) {

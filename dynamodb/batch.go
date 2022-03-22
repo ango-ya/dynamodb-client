@@ -38,7 +38,7 @@ func (b *BatchWriter) Put(ctx context.Context, in interface{}) (err error) {
 	return
 }
 
-func (b *BatchWriter) Contents() interface{} {
+func (b *BatchWriter) Contents() []types.TransactWriteItem {
 	b.Lock()
 	defer b.Unlock()
 
