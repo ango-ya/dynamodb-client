@@ -3,12 +3,22 @@ package dynamodb
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/ango-ya/aws-s3-client/s3"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	// "github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	TestImagePath  = "./testimg/sample.png"
+	TestBucketName = "tak-sandbox"
+	TestKey        = "sample.png"
 )
 
 type User struct {
@@ -22,6 +32,7 @@ type AddressBook struct {
 	Id         int    `key:"-" dynamodbav:"id"`
 	Addr       string `key:"-" dynamodbav:"addr"`
 	PostalCode string `dynamodbav:"postal-code"`
+	IconImg    string `dynamodbav:"icon-img"`
 }
 
 func TestInsertStruct(t *testing.T) {
@@ -103,12 +114,63 @@ func TestUpdateStruct(t *testing.T) {
 				"id":   &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", addr.Id)},
 				"addr": &types.AttributeValueMemberS{Value: addr.Addr},
 			},
-			UpdateExpression: aws.String("SET postal-code = :postal-code"),
+			UpdateExpression: aws.String("SET postal-code = :postal-code, icon-img = :icon-img"),
 			ExpressionAttributeValues: map[string]types.AttributeValue{
 				":postal-code": &types.AttributeValueMemberS{Value: addr.PostalCode},
+				":icon-img":    &types.AttributeValueMemberS{Value: addr.IconImg},
 			},
 		},
 	}
 
 	require.Equal(t, expected, b.inputs[0])
+}
+
+func TestUpdateStructWithS3(t *testing.T) {
+	file, err := os.Open(TestImagePath)
+	require.NoError(t, err)
+	defer file.Close()
+
+	var (
+		ctx      = context.Background()
+		confOpts = []func(*config.LoadOptions) error{
+			config.WithDefaultRegion(TestRegion),
+			config.WithSharedConfigProfile(TestProfile),
+		}
+		b    = BatchWriterWithS3{uploadeds: make(map[PairOfBucketNameAndKey]string)}
+		addr = AddressBook{
+			Id:         1,
+			Addr:       "Fukuoka, Japan",
+			PostalCode: "123-4567",
+		}
+		expectedURI = "https://s3.us-east-1.amazonaws.com/tak-sandbox/sample.png"
+	)
+
+	s3client, err := s3.NewS3Client(ctx, confOpts, s3.WithTimeout(5*time.Second))
+	require.NoError(t, err)
+
+	b.s3client = &s3client
+
+	err = b.UpdateStructWithS3(ctx, &addr, "icon-img", TestBucketName, TestKey, file)
+	require.NoError(t, err)
+
+	expectedInput := types.TransactWriteItem{
+		Update: &types.Update{
+			TableName: aws.String("address-book"),
+			Key: map[string]types.AttributeValue{
+				"id":   &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", addr.Id)},
+				"addr": &types.AttributeValueMemberS{Value: addr.Addr},
+			},
+			UpdateExpression: aws.String("SET postal-code = :postal-code, icon-img = :icon-img"),
+			ExpressionAttributeValues: map[string]types.AttributeValue{
+				":postal-code": &types.AttributeValueMemberS{Value: addr.PostalCode},
+				":icon-img":    &types.AttributeValueMemberS{Value: expectedURI},
+			},
+		},
+	}
+	require.Equal(t, expectedInput, b.inputs[0])
+
+	expectedUploadeds := map[PairOfBucketNameAndKey]string{
+		PairOfBucketNameAndKey{Name: TestBucketName, Key: TestKey}: expectedURI,
+	}
+	require.Equal(t, expectedUploadeds, b.uploadeds)
 }

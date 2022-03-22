@@ -90,13 +90,16 @@ func (d *DynamoDB) Get(ctx context.Context, arg *dynamodb.GetItemInput) (out int
 func (d *DynamoDB) GetStruct(ctx context.Context, in interface{}, result interface{}) (err error) {
 	v := reflect.ValueOf(in)
 
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
 	// only struct supported for now
 	if v.Kind() != reflect.Struct {
 		err = ErrUnsupported
-		return
 	}
 
-	key, exist, err := lookupKey(in)
+	key, exist, err := lookupKey(v)
 	if err != nil && !exist {
 		err = ErrKeyTagNotFound
 	}

@@ -79,7 +79,7 @@ func (b *BatchWriter) DeleteStruct(ctx context.Context, in interface{}) (err err
 		return
 	}
 
-	key, exist, err := lookupKey(in)
+	key, exist, err := lookupKey(v)
 	if err != nil && !exist {
 		err = ErrKeyTagNotFound
 	}
@@ -103,7 +103,7 @@ func (b *BatchWriter) UpdateStruct(ctx context.Context, in interface{}) (err err
 		return
 	}
 
-	key, exist, err := lookupKey(in)
+	key, exist, err := lookupKey(v)
 	if err != nil && !exist {
 		err = ErrKeyTagNotFound
 	}
@@ -178,7 +178,7 @@ func (b *BatchWriterWithS3) UpdateStructWithS3(ctx context.Context, in interface
 	if err := b.upload(ctx, in, fieldName, bucket, key, body); err != nil {
 		return errors.Wrap(err, fmt.Sprintf("failed to updating %v on s3 batch", in))
 	}
-	return b.DeleteStruct(ctx, in)
+	return b.UpdateStruct(ctx, in)
 }
 
 func (b *BatchWriterWithS3) upload(ctx context.Context, in interface{}, fieldName, bucket, key string, body io.Reader) (err error) {
@@ -234,10 +234,9 @@ func name(in interface{}) string {
 	return strcase.ToKebab(n)
 }
 
-func lookupKey(s interface{}) (attrMap map[string]types.AttributeValue, exist bool, err error) {
+func lookupKey(v reflect.Value) (attrMap map[string]types.AttributeValue, exist bool, err error) {
 	attrMap = make(map[string]types.AttributeValue)
-	t := reflect.TypeOf(s)
-	v := reflect.ValueOf(s)
+	t := v.Type()
 	for i := 0; i < t.NumField(); i++ {
 		var (
 			fieldType  = t.Field(i)
