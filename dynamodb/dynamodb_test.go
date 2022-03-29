@@ -96,7 +96,7 @@ func TestAll(t *testing.T) {
 	listArg := &dynamodb.ScanInput{
 		TableName: aws.String(tableName),
 	}
-	listOut, err := d.List(ctx, listArg)
+	listOut, err := d.Scan(ctx, listArg)
 	require.NoError(t, err)
 
 	resp := listOut.(*dynamodb.ScanOutput)
@@ -112,7 +112,7 @@ func TestAll(t *testing.T) {
 	})
 	require.EqualValues(t, persons, result)
 
-	err = d.ListStruct(ctx, persons[0], &result)
+	err = d.ScanStruct(ctx, persons[0], &result)
 	require.NoError(t, err)
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Id < result[j].Id

@@ -88,61 +88,12 @@ func (d *DynamoDB) Get(ctx context.Context, arg *dynamodb.GetItemInput) (out int
 	return d.invoke(ctx, arg, handler)
 }
 
-func (d *DynamoDB) GetStruct(ctx context.Context, in interface{}, result interface{}) (err error) {
-	v, err := d.acquireReflectValue(in)
-	if err != nil {
-		return
-	}
-
-	key, exist, err := lookupKey(v)
-	if err != nil && !exist {
-		err = ErrKeyTagNotFound
-	}
-	if err != nil {
-		return
-	}
-
-	arg := &dynamodb.GetItemInput{
-		TableName: aws.String(name(v.Type())),
-		Key:       key,
-	}
-
-	out, err := d.Get(ctx, arg)
-	if err != nil {
-		return
-	}
-
-	res := out.(*dynamodb.GetItemOutput)
-
-	return attributevalue.UnmarshalMap(res.Item, result)
-}
-
-func (d *DynamoDB) List(ctx context.Context, arg *dynamodb.ScanInput) (out interface{}, err error) {
+func (d *DynamoDB) Scan(ctx context.Context, arg *dynamodb.ScanInput) (out interface{}, err error) {
 	handler := func(ctx context.Context, in interface{}) (out interface{}, err error) {
 		return d.client.Scan(ctx, arg)
 	}
 
 	return d.invoke(ctx, arg, handler)
-}
-
-func (d *DynamoDB) ListStruct(ctx context.Context, in interface{}, result interface{}) (err error) {
-	v, err := d.acquireReflectValue(in)
-	if err != nil {
-		return
-	}
-
-	arg := &dynamodb.ScanInput{
-		TableName: aws.String(name(v.Type())),
-	}
-
-	out, err := d.List(ctx, arg)
-	if err != nil {
-		return
-	}
-
-	res := out.(*dynamodb.ScanOutput)
-
-	return attributevalue.UnmarshalListOfMaps(res.Items, result)
 }
 
 func (d *DynamoDB) DescribeTable(ctx context.Context, arg *dynamodb.DescribeTableInput) (out interface{}, err error) {
@@ -151,35 +102,6 @@ func (d *DynamoDB) DescribeTable(ctx context.Context, arg *dynamodb.DescribeTabl
 	}
 
 	return d.invoke(ctx, arg, handler)
-}
-
-func (d *DynamoDB) Writer(ctx context.Context) BatchWriter {
-	return BatchWriter{}
-}
-
-func (d *DynamoDB) WriterWithS3(ctx context.Context) (b BatchWriterWithS3) {
-	b.s3client = d.s3client
-	b.uploadeds = make(map[PairOfBucketNameAndKey]string)
-	return
-}
-
-func (d *DynamoDB) Commit(ctx context.Context, writer *BatchWriter) (out interface{}, err error) {
-	out, err = d.commit(ctx, writer.Contents())
-	return
-}
-
-func (d *DynamoDB) CommitWithS3(ctx context.Context, writer *BatchWriterWithS3) (out interface{}, err error) {
-	if out, err = d.commit(ctx, writer.Contents()); err != nil {
-		// delete uploaded files from s3
-		for pair, url := range writer.uploadeds {
-			if delErr := d.s3client.Delete(ctx, pair.Name, pair.Key); delErr != nil {
-				err = errors.Wrap(err, fmt.Sprintf("failed delete file(%s)", url))
-			}
-		}
-		return
-	}
-
-	return
 }
 
 func (d *DynamoDB) CreateTableFromStruct(ctx context.Context, in interface{}) (out interface{}, err error) {
@@ -222,6 +144,55 @@ func (d *DynamoDB) DropTableFromStruct(ctx context.Context, in interface{}) (out
 
 	d.logger.Info().Msgf("droping table: %s", tableName)
 	return d.DropTable(ctx, arg)
+}
+
+func (d *DynamoDB) GetStruct(ctx context.Context, in interface{}, result interface{}) (err error) {
+	v, err := d.acquireReflectValue(in)
+	if err != nil {
+		return
+	}
+
+	key, exist, err := lookupKey(v)
+	if err != nil && !exist {
+		err = ErrKeyTagNotFound
+	}
+	if err != nil {
+		return
+	}
+
+	arg := &dynamodb.GetItemInput{
+		TableName: aws.String(name(v.Type())),
+		Key:       key,
+	}
+
+	out, err := d.Get(ctx, arg)
+	if err != nil {
+		return
+	}
+
+	res := out.(*dynamodb.GetItemOutput)
+
+	return attributevalue.UnmarshalMap(res.Item, result)
+}
+
+func (d *DynamoDB) ScanStruct(ctx context.Context, in interface{}, result interface{}) (err error) {
+	v, err := d.acquireReflectValue(in)
+	if err != nil {
+		return
+	}
+
+	arg := &dynamodb.ScanInput{
+		TableName: aws.String(name(v.Type())),
+	}
+
+	out, err := d.Scan(ctx, arg)
+	if err != nil {
+		return
+	}
+
+	res := out.(*dynamodb.ScanOutput)
+
+	return attributevalue.UnmarshalListOfMaps(res.Items, result)
 }
 
 func (d *DynamoDB) DescribeTableFromStruct(ctx context.Context, in interface{}) (out interface{}, err error) {
@@ -273,6 +244,35 @@ func (d *DynamoDB) WaitForTableDeletion(ctx context.Context, in interface{}) err
 			o.MinDelay = 1 * time.Second
 		},
 	)
+}
+
+func (d *DynamoDB) Writer(ctx context.Context) BatchWriter {
+	return BatchWriter{}
+}
+
+func (d *DynamoDB) Commit(ctx context.Context, writer *BatchWriter) (out interface{}, err error) {
+	out, err = d.commit(ctx, writer.Contents())
+	return
+}
+
+func (d *DynamoDB) WriterWithS3(ctx context.Context) (b BatchWriterWithS3) {
+	b.s3client = d.s3client
+	b.uploadeds = make(map[PairOfBucketNameAndKey]string)
+	return
+}
+
+func (d *DynamoDB) CommitWithS3(ctx context.Context, writer *BatchWriterWithS3) (out interface{}, err error) {
+	if out, err = d.commit(ctx, writer.Contents()); err != nil {
+		// delete uploaded files from s3
+		for pair, url := range writer.uploadeds {
+			if delErr := d.s3client.Delete(ctx, pair.Name, pair.Key); delErr != nil {
+				err = errors.Wrap(err, fmt.Sprintf("failed delete file(%s)", url))
+			}
+		}
+		return
+	}
+
+	return
 }
 
 func (b *DynamoDB) acquireReflectValue(in interface{}) (v reflect.Value, err error) {
