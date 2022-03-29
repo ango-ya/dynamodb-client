@@ -89,15 +89,9 @@ func (d *DynamoDB) Get(ctx context.Context, arg *dynamodb.GetItemInput) (out int
 }
 
 func (d *DynamoDB) GetStruct(ctx context.Context, in interface{}, result interface{}) (err error) {
-	v := reflect.ValueOf(in)
-
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-
-	// only struct supported for now
-	if v.Kind() != reflect.Struct {
-		err = ErrUnsupported
+	v, err := d.acquireReflectValue(in)
+	if err != nil {
+		return
 	}
 
 	key, exist, err := lookupKey(v)
@@ -132,11 +126,8 @@ func (d *DynamoDB) List(ctx context.Context, arg *dynamodb.ScanInput) (out inter
 }
 
 func (d *DynamoDB) ListStruct(ctx context.Context, in interface{}, result interface{}) (err error) {
-	v := reflect.ValueOf(in)
-
-	// only struct supported for now
-	if v.Kind() != reflect.Struct {
-		err = ErrUnsupported
+	v, err := d.acquireReflectValue(in)
+	if err != nil {
 		return
 	}
 
@@ -192,11 +183,8 @@ func (d *DynamoDB) CommitWithS3(ctx context.Context, writer *BatchWriterWithS3) 
 }
 
 func (d *DynamoDB) CreateTableFromStruct(ctx context.Context, in interface{}) (out interface{}, err error) {
-	v := reflect.ValueOf(in)
-
-	// only struct supported for now
-	if v.Kind() != reflect.Struct {
-		err = ErrUnsupported
+	v, err := d.acquireReflectValue(in)
+	if err != nil {
 		return
 	}
 
@@ -222,11 +210,8 @@ func (d *DynamoDB) CreateTableFromStruct(ctx context.Context, in interface{}) (o
 }
 
 func (d *DynamoDB) DropTableFromStruct(ctx context.Context, in interface{}) (out interface{}, err error) {
-	v := reflect.ValueOf(in)
-
-	// only struct supported for now
-	if v.Kind() != reflect.Struct {
-		err = ErrUnsupported
+	v, err := d.acquireReflectValue(in)
+	if err != nil {
 		return
 	}
 
@@ -240,11 +225,8 @@ func (d *DynamoDB) DropTableFromStruct(ctx context.Context, in interface{}) (out
 }
 
 func (d *DynamoDB) DescribeTableFromStruct(ctx context.Context, in interface{}) (out interface{}, err error) {
-	v := reflect.ValueOf(in)
-
-	// only struct supported for now
-	if v.Kind() != reflect.Struct {
-		err = ErrUnsupported
+	v, err := d.acquireReflectValue(in)
+	if err != nil {
 		return
 	}
 
@@ -256,15 +238,13 @@ func (d *DynamoDB) DescribeTableFromStruct(ctx context.Context, in interface{}) 
 }
 
 func (d *DynamoDB) WaitForTableCreation(ctx context.Context, in interface{}) error {
-	v := reflect.ValueOf(in)
-
-	// only struct supported for now
-	if v.Kind() != reflect.Struct {
-		return ErrUnsupported
+	v, err := d.acquireReflectValue(in)
+	if err != nil {
+		return err
 	}
 
 	w := dynamodb.NewTableExistsWaiter(d.client)
-	err := w.Wait(ctx,
+	return w.Wait(ctx,
 		&dynamodb.DescribeTableInput{
 			TableName: aws.String(name(v.Type())),
 		},
@@ -274,20 +254,16 @@ func (d *DynamoDB) WaitForTableCreation(ctx context.Context, in interface{}) err
 			o.MinDelay = 1 * time.Second
 		},
 	)
-
-	return err
 }
 
 func (d *DynamoDB) WaitForTableDeletion(ctx context.Context, in interface{}) error {
-	v := reflect.ValueOf(in)
-
-	// only struct supported for now
-	if v.Kind() != reflect.Struct {
-		return ErrUnsupported
+	v, err := d.acquireReflectValue(in)
+	if err != nil {
+		return err
 	}
 
 	w := dynamodb.NewTableNotExistsWaiter(d.client)
-	err := w.Wait(ctx,
+	return w.Wait(ctx,
 		&dynamodb.DescribeTableInput{
 			TableName: aws.String(name(v.Type())),
 		},
@@ -297,8 +273,21 @@ func (d *DynamoDB) WaitForTableDeletion(ctx context.Context, in interface{}) err
 			o.MinDelay = 1 * time.Second
 		},
 	)
+}
 
-	return err
+func (b *DynamoDB) acquireReflectValue(in interface{}) (v reflect.Value, err error) {
+	v = reflect.ValueOf(in)
+
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	// only struct supported for now
+	if v.Kind() != reflect.Struct {
+		err = ErrUnsupported
+	}
+
+	return
 }
 
 func (d *DynamoDB) invoke(ctx context.Context, in interface{}, h Handler) (out interface{}, err error) {

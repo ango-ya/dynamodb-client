@@ -53,7 +53,7 @@ func (b *BatchWriter) Len() int {
 }
 
 func (b *BatchWriter) InsertStruct(ctx context.Context, in interface{}) (err error) {
-	v, err := b.acquireValue(in)
+	v, err := b.acquireReflectValue(in)
 	if err != nil {
 		return
 	}
@@ -74,7 +74,7 @@ func (b *BatchWriter) InsertStruct(ctx context.Context, in interface{}) (err err
 }
 
 func (b *BatchWriter) DeleteStruct(ctx context.Context, in interface{}) (err error) {
-	v, err := b.acquireValue(in)
+	v, err := b.acquireReflectValue(in)
 	if err != nil {
 		return
 	}
@@ -98,7 +98,7 @@ func (b *BatchWriter) DeleteStruct(ctx context.Context, in interface{}) (err err
 }
 
 func (b *BatchWriter) UpdateStruct(ctx context.Context, in interface{}) (err error) {
-	v, err := b.acquireValue(in)
+	v, err := b.acquireReflectValue(in)
 	if err != nil {
 		return
 	}
@@ -140,7 +140,7 @@ func (b *BatchWriter) UpdateStruct(ctx context.Context, in interface{}) (err err
 	return b.Put(ctx, tx)
 }
 
-func (b *BatchWriter) acquireValue(in interface{}) (v reflect.Value, err error) {
+func (b *BatchWriter) acquireReflectValue(in interface{}) (v reflect.Value, err error) {
 	v = reflect.ValueOf(in)
 
 	if v.Kind() == reflect.Ptr {
@@ -182,7 +182,7 @@ func (b *BatchWriterWithS3) UpdateStructWithS3(ctx context.Context, in interface
 }
 
 func (b *BatchWriterWithS3) upload(ctx context.Context, in interface{}, fieldName, bucket, key string, body io.Reader) (err error) {
-	v, err := b.acquireValue(in)
+	v, err := b.acquireReflectValue(in)
 	if err != nil {
 		return err
 	}
@@ -207,7 +207,7 @@ func (b *BatchWriterWithS3) upload(ctx context.Context, in interface{}, fieldNam
 	return nil
 }
 
-func (b *BatchWriterWithS3) acquireValue(in interface{}) (v reflect.Value, err error) {
+func (b *BatchWriterWithS3) acquireReflectValue(in interface{}) (v reflect.Value, err error) {
 	v = reflect.ValueOf(in)
 	if v.Kind() != reflect.Ptr {
 		err = errors.Wrap(ErrUnsupported, "only pointer is supported")
