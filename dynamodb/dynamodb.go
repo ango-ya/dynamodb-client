@@ -88,9 +88,25 @@ func (d *DynamoDB) Get(ctx context.Context, arg *dynamodb.GetItemInput) (out int
 	return d.invoke(ctx, arg, handler)
 }
 
+func (d *DynamoDB) BatchGet(ctx context.Context, arg *dynamodb.BatchGetItemInput) (out interface{}, err error) {
+	handler := func(ctx context.Context, in interface{}) (out interface{}, err error) {
+		return d.client.BatchGetItem(ctx, arg)
+	}
+
+	return d.invoke(ctx, arg, handler)
+}
+
 func (d *DynamoDB) Scan(ctx context.Context, arg *dynamodb.ScanInput) (out interface{}, err error) {
 	handler := func(ctx context.Context, in interface{}) (out interface{}, err error) {
 		return d.client.Scan(ctx, arg)
+	}
+
+	return d.invoke(ctx, arg, handler)
+}
+
+func (d *DynamoDB) Query(ctx context.Context, arg *dynamodb.QueryInput) (out interface{}, err error) {
+	handler := func(ctx context.Context, in interface{}) (out interface{}, err error) {
+		return d.client.Query(ctx, arg)
 	}
 
 	return d.invoke(ctx, arg, handler)
@@ -174,6 +190,55 @@ func (d *DynamoDB) GetStruct(ctx context.Context, in interface{}, result interfa
 
 	return attributevalue.UnmarshalMap(res.Item, result)
 }
+
+// func (d *DynamoDB) BatchGetStruct(ctx context.Context, in interface{}, result interface{}...) error {
+// 	v := reflect.ValueOf(in)
+
+// 	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
+// 		return errors.Wrap(ErrUnsupported, "supported only array or slice")
+// 	}
+
+// 	arg := &dynamodb.BatchGetItemInput{
+// 		RequestItems: make(map[string]types.KeysAndAttributes),
+// 	}
+
+// 	for i := 0; i < v.Len(); i++ {
+// 		item := v.Index(i)
+// 		if v.Kind() == reflect.Ptr {
+// 			item = item.Elem()
+// 		}
+
+// 		if item.Kind() != reflect.Struct {
+// 			return errors.Wrap(ErrUnsupported, "contents should be struct")
+// 		}
+
+// 		key, exist, err := lookupKey(item)
+// 		if err != nil && !exist {
+// 			err = ErrKeyTagNotFound
+// 		}
+// 		if err != nil {
+// 			return err
+// 		}
+
+// 		tableName := name(item.Type())
+// 		attr, ok := arg.RequestItems[tableName]
+// 		if !ok {
+// 			attr = types.KeysAndAttributes{Keys: []map[string]types.AttributeValue{}}
+// 		}
+
+// 		attr.Keys = append(attr.Keys, key)
+// 		arg.RequestItems[tableName] = attr
+// 	}
+
+// 	out, err := d.BatchGet(ctx, arg)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	res := out.(*dynamodb.BatchGetItemOutput)
+
+// 	return attributevalue.UnmarshalMap(res.Item, result)
+// }
 
 func (d *DynamoDB) ScanStruct(ctx context.Context, in interface{}, result interface{}) (err error) {
 	v, err := d.acquireReflectValue(in)
