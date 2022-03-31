@@ -229,3 +229,37 @@ func TestWithS3(t *testing.T) {
 	_, err = d.CommitWithS3(ctx, &batch)
 	require.NoError(t, err)
 }
+
+func TestBatchGetStruct(t *testing.T) {
+	var (
+		ctx      = context.Background()
+		confOpts = []func(*config.LoadOptions) error{
+			config.WithDefaultRegion(TestRegion),
+			config.WithSharedConfigProfile(TestProfile),
+		}
+		profiles = []Profile{
+			Profile{Id: "101"},
+			Profile{Id: "102"},
+		}
+		results = []*Profile{
+			&Profile{},
+			&Profile{},
+		}
+	)
+
+	d, err := NewDynamoDB(ctx, confOpts, WithTimeout(5*time.Second))
+	require.NoError(t, err)
+
+	err = d.BatchGetStruct(ctx, profiles, results)
+	require.NoError(t, err)
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Id < results[j].Id
+	})
+
+	expected := []*Profile{
+		&Profile{"101", "alice", 20, "https://s3.us-east-1.amazonaws.com/tak-sandbox/sample.png"},
+		&Profile{"102", "bob", 50, "https://s3.us-east-1.amazonaws.com/tak-sandbox/sample2.png"},
+	}
+	require.EqualValues(t, expected, results)
+}
