@@ -72,6 +72,13 @@ func (d *DynamoDB) CreateTable(ctx context.Context, arg *dynamodb.CreateTableInp
 	return d.invoke(ctx, arg, handler)
 }
 
+func (d *DynamoDB) ListTables(ctx context.Context, arg *dynamodb.ListTablesInput) (out interface{}, err error) {
+	handler := func(ctx context.Context, in interface{}) (out interface{}, err error) {
+		return d.client.ListTables(ctx, arg)
+	}
+	return d.invoke(ctx, arg, handler)
+}
+
 func (d *DynamoDB) DropTable(ctx context.Context, arg *dynamodb.DeleteTableInput) (out interface{}, err error) {
 	handler := func(ctx context.Context, in interface{}) (out interface{}, err error) {
 		return d.client.DeleteTable(ctx, arg)
